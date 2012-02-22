@@ -15,48 +15,49 @@ while [[ ! -z "$json" ]]; do
   char=${json:0:1}
   json=${json:1}
 
-  if [[ $char =~ [[{] ]]; then
-    level="${char}${level}"
-    seen[${#level}-1]="$obj"
-    seen[${#level}]="${char} "
-    obj="${seen[${#level}]}"
-    key[${#level}]=0
-  elif [[ $char == '"' ]]; then
-    str="$(expr "${json}" : '\(\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')"
-    if [[ ${level:0:1} == '{' && ${obj: -2} != ': ' ]]; then
-      key[${#level}]="${char}${str}"
-      obj="${obj}${char}${str}"
-    else
-      value="${char}${str}"
-    fi
-    json="${json:${#str}}"
-  elif [[ $char =~ [-0-9] ]]; then
-    i=0
-    while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
-    [[ ${json:$i:1} =~ [.] ]] && let i=i+1
-    while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
-    [[ ${json:$i:1} =~ [eE] ]] && let i=i+1
-    [[ ${json:$i:1} =~ [-+] ]] && let i=i+1
-    while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
-    value="${char}${json:0:$i}"
-    json="${json:$i}"
-  elif [[ $char =~ [tfn] ]]; then
-    [[ $char == 'f' ]] && length=4 || length=3
-    value="${char}${json:0:$length}"
-    [[ $value == 'true' || $value == 'null' || $value == 'false' ]] || exit 1
-    json="${json:$length}"
-  elif [[ $char =~ [:,] ]]; then
-    [[ ${level:0:1} == '[' ]] && key[${#level}]=$[ ${key[${#level}]} + 1 ]
-    obj="${obj}${char} "
-  elif [[ $char =~ []}] ]]; then
-    [[ "${char}" == '}' ]] && pair='{' || pair='['
-    [[ "${obj}" != "${pair} " ]] && value="${obj} ${char}" || value="${pair} ${char}"
-    level="${level:1}"
-    obj="${seen[${#level}]}"
-    unset key[${#level}+1]
-  elif [[ ! $char =~ [[:space:]] ]]; then
-    exit 1
-  fi
+  case "${char}" in ( '' )
+    ;; ( '{' | '[' )
+      level="${char}${level}"
+      seen[${#level}-1]="$obj"
+      seen[${#level}]="${char} "
+      obj="${seen[${#level}]}"
+      key[${#level}]=0
+    ;; ( ':' | ',' )
+      [[ ${level:0:1} == '[' ]] && key[${#level}]=$[ ${key[${#level}]} + 1 ]
+      obj="${obj}${char} "
+    ;; ( '}' | ']' )
+      [[ "${char}" == '}' ]] && pair='{' || pair='['
+      [[ "${obj}" != "${pair} " ]] && value="${obj} ${char}" || value="${pair} ${char}"
+      level="${level:1}"
+      obj="${seen[${#level}]}"
+      unset key[${#level}+1]
+    ;; ( '"' )
+      str="$(expr "${json}" : '\(\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')"
+      if [[ ${level:0:1} == '{' && ${obj: -2} != ': ' ]]; then
+        key[${#level}]="${char}${str}"
+        obj="${obj}${char}${str}"
+      else
+        value="${char}${str}"
+      fi
+      json="${json:${#str}}"
+    ;; ( [-0-9] )
+      i=0
+      while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
+      [[ ${json:$i:1} =~ [.] ]] && let i=i+1
+      while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
+      [[ ${json:$i:1} =~ [eE] ]] && let i=i+1
+      [[ ${json:$i:1} =~ [-+] ]] && let i=i+1
+      while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
+      value="${char}${json:0:$i}"
+      json="${json:$i}"
+    ;; ( [tfn] )
+      [[ $char == 'f' ]] && length=4 || length=3
+      value="${char}${json:0:$length}"
+      [[ $value == 'true' || $value == 'null' || $value == 'false' ]] || exit 1
+      json="${json:$length}"
+    ;; ( [[:space:]] )
+    ;; ( * ) exit 1
+  esac
 
   if [[ ! -z $value ]]; then
     echo "$(keypath): $value"
