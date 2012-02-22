@@ -1,97 +1,60 @@
 #!/usr/bin/env bash
-
 shopt -u xpg_echo
+json=$(cat)
 
-function write() {
-  echo "$(keypath): $value"
-  [[ ${#structures[*]} -eq 0 ]] && return
-  structures[${#structures[*]}-1]="${structures[${#structures[*]}-1]}${value}"
-}
+declare level
+declare -a data
+declare struct
+key=( this )
 
 function keypath() {
   echo -n ${key[0]} && [ ${#key[*]} -gt 1 ] && printf "[%s]" "${key[@]:1}"
 }
 
-json=$(cat)
+while [[ ! -z "$json" ]]; do
+  char=${json:0:1}
 
-index=0
-level=''
-mode='value'
-declare -a structures
-
-key=( this )
-
-while [[ $index -lt ${#json} ]]
-do
-  char=${json:$index:1}
-
-  if [[ $mode != 'string' && $char =~ [[:space:]] ]]; then
-    test
-  elif [[ $mode == 'value' && (${json:$index:4} == 'true' || ${json:$index:4} == 'null' || ${json:$index:5} == 'false') ]]; then
-    [ "$char" == 'f' ] && length=5 || length=4
-    value=${json:$index:$length}
-    let index=index+$length-1
-  elif [[ $char == ',' ]]; then
-    head=${key[${#key[*]}-1]}
-    unset key[${#key[*]}-1]
-    structures[${#structures[*]}-1]="${structures[${#structures[*]}-1]}, "
-    if [[ ${level: -1} == 'A' ]]; then
-      key[${#key[*]}]=$((( $head + 1 )))
-    else
-      mode='key'
-    fi
-  elif [[ $mode == 'value' && $char == '{' ]]; then
-    mode='key'
-    level="${level}H"
-    structures[${#structures[*]}]="{ "
-  elif [[ $mode == 'key' && $char == ':' ]]; then
-    structures[${#structures[*]}-1]="${structures[${#structures[*]}-1]}: "
-    mode='value'
-  elif [[ $char == '}' && ${level: -1} == 'H' ]]; then
-    level="${level%H}"
-    if [[ "${structures[${#structures[*]}-1]}" != '{ ' ]]; then
-      unset key[${#key[*]}-1]
-    fi
-    structures[${#structures[*]}-1]="${structures[${#structures[*]}-1]} }"
-    value="${structures[${#structures[*]}-1]}"
-    unset structures[${#structures[*]}-1]
-    # [ ${#key[*]} -gt 1 ] && write $value
-    [[ ${level: -1} == 'H' ]] && mode='key' || mode='value'
-  elif [[ $mode == 'value' && $char == '[' ]]; then
-    level="${level}A"
-    structures[${#structures[*]}]="[ "
-    key[${#key[*]}]=0
-  elif [[ $mode == 'value' && $char == ']' && ${level: -1} == 'A' ]]; then
-    level="${level%A}"
-    unset key[${#key[*]}-1]
-    structures[${#structures[*]}-1]="${structures[${#structures[*]}-1]} ]"
-    value=${structures[${#structures[*]}-1]}
-    unset structures[${#structures[*]}-1]
-    # [ ${#key[*]} -gt 1 ] && write $value
-  elif [[ $mode == 'value' && $char == '-' || $(expr "$char" : '\([0-9]\)') ]]; then
-    value=$(expr "${json:$index}" : '\(-*[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\([eE][+-]\{0,1\}[0-9][0-9]*\)\{0,1\}\)')
-    let index=index+${#value}-1
+  if [[ $char =~ [[{] ]]; then
+    level="${char}${level}"
+    data[${#level}-1]="$struct"
+    data[${#level}]="${char} "
+    struct="${data[${#level}]}"
+    key[${#level}]=0
   elif [[ $char == '"' ]]; then
-    start=$index
-    escaped=false
-    while [[ $index -lt ${#json} ]]; do
-      let index=index+1
-      [[ $escaped == true ]] && escaped=false && continue
-      [[ ${json:$index:1} == '"' ]] && break
-      [[ ${json:$index:1} == '\' ]] && escaped=true
-    done
-    string=${json:$start:$index-$start+1}
-    if [[ $mode == 'key' ]]; then
-      key[${#key[*]}]=$string
-      structures[${#structures[*]}-1]="${structures[${#structures[*]}-1]}${string}"
-    else
-      value=$string
+    value=$(expr "$json" : '\("\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')
+    length=${#value}
+    if [[ ${level:0:1} == '{' && ${struct: -2} != ': ' ]]; then
+      key[${#level}]="$value"
+      struct="${struct}${value}"
+      unset value
     fi
-  else
-    echo "UNRECOGNIZED CHARACTER '$char' { mode: $mode, level: $level }"
-    test
+    json="${json:$length-1}"
+  elif [[ $char =~ [-0-9] ]]; then
+    value=$(expr "$json" : '\(-*[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\([eE][+-]\{0,1\}[0-9][0-9]*\)\{0,1\}\)')
+    length=${#value}
+    json="${json:$length-1}"
+  elif [[ $char =~ [tfn] ]]; then
+    [[ $char == 'f' ]] && length=5 || length=4
+    value="${json:0:$length}"
+    [[ $value == 'true' || $value == 'null' || $value == 'false' ]] || exit 1
+    json="${json:$length-1}"
+  elif [[ $char =~ [:,] ]]; then
+    [[ ${level:0:1} == '[' ]] && key[${#level}]=$[ ${key[${#level}]} + 1 ]
+    struct="${struct}${char} "
+  elif [[ $char =~ []}] ]]; then
+    [[ "${char}" == '}' ]] && pair='{' || pair='['
+    [[ "${struct}" != "${pair} " ]] && value="${struct} ${char}" || value="${pair} ${char}"
+    level="${level:1}"
+    struct="${data[${#level}]}"
+    unset key[${#level}+1]
+  elif [[ ! $char =~ [[:space:]] ]]; then
+    exit 1
   fi
 
-  [[ ! -z $value ]] && write && unset value
-  let index=index+1
+  if [[ ! -z $value ]]; then
+    echo "$(keypath): $value"
+    struct="${struct}${value}"
+    unset value
+  fi
+  json=${json:1}
 done
