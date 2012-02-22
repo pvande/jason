@@ -21,7 +21,7 @@ while [[ ! -z "$json" ]]; do
     struct="${data[${#level}]}"
     key[${#level}]=0
   elif [[ $char == '"' ]]; then
-    value=$(expr "$json" : '\("\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')
+    value=$(expr "${json:0:100}" : '\("\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')
     length=${#value}
     if [[ ${level:0:1} == '{' && ${struct: -2} != ': ' ]]; then
       key[${#level}]="$value"
@@ -30,7 +30,7 @@ while [[ ! -z "$json" ]]; do
     fi
     json="${json:$length-1}"
   elif [[ $char =~ [-0-9] ]]; then
-    value=$(expr "$json" : '\(-*[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\([eE][+-]\{0,1\}[0-9][0-9]*\)\{0,1\}\)')
+    value=$(expr "${json:0:20}" : '\(-*[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\([eE][+-]\{0,1\}[0-9][0-9]*\)\{0,1\}\)')
     length=${#value}
     json="${json:$length-1}"
   elif [[ $char =~ [tfn] ]]; then

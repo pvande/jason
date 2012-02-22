@@ -7,10 +7,9 @@ function ok() {
     echo "OK ${test}"
   else
     echo "NOT OK ${test}"
-    echo "  EXPECTED: $expected"
-    echo "  ACTUAL: $results"
     echo "  DIFF:"
     diff -y <(echo -E "$expected") <(echo -$ "$results")
+    exit 1
   fi
 }
 
