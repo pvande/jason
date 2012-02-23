@@ -11,50 +11,46 @@ function keypath() {
   echo -n ${key[0]} && [ ${#key[*]} -gt 1 ] && printf "[%s]" "${key[@]:1}"
 }
 
-while [[ ! -z "$json" ]]; do
-  char=${json:0:1}
-  json=${json:1}
+index=0
+depth=0
+char=1
+until [[ -z "$char" ]]; do
+  char=${json:$index:1}
+  let index=index+1
 
   case "${char}" in ( '' )
-    ;; ( '{' | '[' )
-      level="${char}${level}"
-      seen[${#level}-1]="$obj"
-      seen[${#level}]="${char} "
-      obj="${seen[${#level}]}"
-      key[${#level}]=0
     ;; ( ':' | ',' )
-      [[ ${level:0:1} == '[' ]] && key[${#level}]=$[ ${key[${#level}]} + 1 ]
+      [[ ${level:0:1} == '[' ]] && key[$depth]=$[ ${key[$depth]} + 1 ]
       obj="${obj}${char} "
-    ;; ( '}' | ']' )
-      [[ "${char}" == '}' ]] && pair='{' || pair='['
-      [[ "${obj}" != "${pair} " ]] && value="${obj} ${char}" || value="${pair} ${char}"
-      level="${level:1}"
-      obj="${seen[${#level}]}"
-      unset key[${#level}+1]
-    ;; ( '"' )
-      str="$(expr "${json}" : '\(\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')"
-      if [[ ${level:0:1} == '{' && ${obj: -2} != ': ' ]]; then
-        key[${#level}]="${char}${str}"
-        obj="${obj}${char}${str}"
-      else
-        value="${char}${str}"
-      fi
-      json="${json:${#str}}"
-    ;; ( [-0-9] )
-      i=0
-      while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
-      [[ ${json:$i:1} =~ [.] ]] && let i=i+1
-      while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
-      [[ ${json:$i:1} =~ [eE] ]] && let i=i+1
-      [[ ${json:$i:1} =~ [-+] ]] && let i=i+1
-      while true; do [[ ${json:$i:1} =~ [0-9] ]] && let i=i+1 || break; done
-      value="${char}${json:0:$i}"
-      json="${json:$i}"
     ;; ( [tfn] )
       [[ $char == 'f' ]] && length=4 || length=3
-      value="${char}${json:0:$length}"
-      [[ $value == 'true' || $value == 'null' || $value == 'false' ]] || exit 1
-      json="${json:$length}"
+      value="${char}${json:$index:$length}"
+      [[ $value =~ true|null|false ]] || exit 1
+      let index=index+$length
+    ;; ( '{' | '[' )
+      let depth=depth+1
+      level="${char}${level}"
+      seen[$depth-1]="$obj"
+      seen[$depth]="${char} "
+      obj="${seen[$depth]}"
+      key[$depth]=0
+    ;; ( '}' | ']' )
+      unset key[$depth]
+      let depth=depth-1
+      [[ ${#obj} == 2 ]] && value="${level:0:1} ${char}" || value="${obj} ${char}"
+      level="${level:1}"
+      obj="${seen[$depth]}"
+    ;; ( '"' )
+      value="$(expr "${json:$index-1}" : '\("\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')"
+      let index=index+${#value}-1
+      if [[ ${level:0:1} == '{' && ${obj: -2} != ': ' ]]; then
+        key[$depth]="$value"
+        obj="${obj}${value}"
+        unset value
+      fi
+    ;; ( [-0-9] )
+      value="$(expr "${json:$index-1}" : '\(-\{0,1\}\([0-9]*\.\)\{0,1\}[0-9]*[eE]\{0,1\}[+-]\{0,1\}[0-9]*\)')"
+      let index=index+${#value}-1
     ;; ( [[:space:]] )
     ;; ( * ) exit 1
   esac
