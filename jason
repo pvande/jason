@@ -13,20 +13,17 @@ function keypath() {
 
 index=0
 depth=0
-char=1
+char=${json:0:1}
 until [[ -z "$char" ]]; do
-  char=${json:$index:1}
-  let index=index+1
-
   case "${char}" in ( '' )
     ;; ( ':' | ',' )
       [[ ${level:0:1} == '[' ]] && key[$depth]=$[ ${key[$depth]} + 1 ]
       obj="${obj}${char} "
     ;; ( [tfn] )
-      [[ $char == 'f' ]] && length=4 || length=3
-      value="${char}${json:$index:$length}"
+      [[ $char == 'f' ]] && length=5 || length=4
+      value="${json:$index:$length}"
       [[ $value =~ true|null|false ]] || exit 1
-      let index=index+$length
+      let index=index+$length-1
     ;; ( '{' | '[' )
       let depth=depth+1
       level="${char}${level}"
@@ -41,16 +38,26 @@ until [[ -z "$char" ]]; do
       level="${level:1}"
       obj="${seen[$depth]}"
     ;; ( '"' )
-      value="$(expr "${json:$index-1}" : '\("\(\(\([^\"]*\([\][^"]\)*\)*[\]"\)*\)*\([^"]\)*"\)')"
-      let index=index+${#value}-1
+      let i=$index+1
+      until [[ ${json:$i:1} == '"' ]]; do
+        [[ ${json:$i:1} == '\' ]] && let i=i+2 || let i=i+1
+      done
+      value="${json:$index:$i-$index+1}"
+      index=$i
       if [[ ${level:0:1} == '{' && ${obj: -2} != ': ' ]]; then
         key[$depth]="$value"
         obj="${obj}${value}"
         unset value
       fi
     ;; ( [-0-9] )
-      value="$(expr "${json:$index-1}" : '\(-\{0,1\}\([0-9]*\.\)\{0,1\}[0-9]*[eE]\{0,1\}[+-]\{0,1\}[0-9]*\)')"
-      let index=index+${#value}-1
+      let i=$index+1
+      while [[ ${json:$i:1} =~ [0-9] ]]; do let i=i+1; done
+      [[ ${json:$i:1} =~ [.] ]] && let i=i+1
+      while [[ ${json:$i:1} =~ [0-9] ]]; do let i=i+1; done
+      [[ ${json:$i:1} =~ [eE] ]] && let i=i+2
+      while [[ ${json:$i:1} =~ [0-9] ]]; do let i=i+1; done
+      value="${json:$index:$i-$index}"
+      let index=$i-1
     ;; ( [[:space:]] )
     ;; ( * ) exit 1
   esac
@@ -60,4 +67,7 @@ until [[ -z "$char" ]]; do
     obj="${obj}${value}"
     unset value
   fi
+
+  let index=index+1
+  char=${json:$index:1}
 done
