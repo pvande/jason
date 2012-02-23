@@ -38,12 +38,13 @@ until [[ -z "$char" ]]; do
       level="${level:1}"
       obj="${seen[$depth]}"
     ;; ( '"' )
-      let i=$index+1
-      until [[ ${json:$i:1} == '"' ]]; do
-        [[ ${json:$i:1} == '\' ]] && let i=i+2 || let i=i+1
+      substring="${json:$index}"
+      value="$char"
+      until [[ $value =~ [^\\](\\.)*\" ]]; do
+        str="${substring#"$value"}"
+        value="${value}${str%%\"*}\""
       done
-      value="${json:$index:$i-$index+1}"
-      index=$i
+      index=$index+${#value}-1
       if [[ ${level:0:1} == '{' && ${obj: -2} != ': ' ]]; then
         key[$depth]="$value"
         obj="${obj}${value}"
