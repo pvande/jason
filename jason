@@ -6,10 +6,26 @@ declare -a seen
 declare obj
 declare level
 key=( this )
+needle=( this )
 
-function keypath() {
-  echo -n ${key[0]} && [ ${#key[*]} -gt 1 ] && printf "[%s]" "${key[@]:1}"
-}
+keypath=${1#this}
+index=0
+char=${keypath:0:1}
+[[ ! "$char" =~ [\[\.:] ]] && char='.' && index=-1
+until [[ -z "$char" ]]; do
+  case "${char}" in ('')
+    ;; ( '[' | '.' | ':' )
+      [[ ! -z $autoquote ]] && needle[${#needle[@]}-1]="${needle[${#needle[@]}-1]}\"" && unset autoquote;
+      [[ "${char}" == ':' ]] && needle[${#needle[@]}]='*'
+      needle[${#needle[@]}]=''
+      [[ "${char}" != '[' ]] && needle[${#needle[@]}-1]='"' && autoquote=1
+    ;; ( ']' )
+    ;; ( * )   needle[${#needle[@]}-1]="${needle[${#needle[@]}-1]}${char}"
+  esac
+  let index=index+1
+  char=${keypath:$index:1}
+done
+[[ ! -z $autoquote ]] && needle[${#needle[@]}-1]="${needle[${#needle[@]}-1]}\"";
 
 index=0
 depth=0
@@ -64,7 +80,13 @@ until [[ -z "$char" ]]; do
   esac
 
   if [[ ! -z $value ]]; then
-    echo "$(keypath): $value"
+    if [[ ${#needle[@]} == 1 || ${#key[@]} == ${#needle[@]} ]]; then
+      success=1
+      for i in "${!needle[@]}"; do
+        [[ "${needle[$i]}" == '*' || "${needle[$i]}" == "${key[$i]}" ]] || unset success
+      done
+      [[ ! -z $success ]] && echo "$(echo -n ${key[0]} && [ ${#key[*]} -gt 1 ] && printf "[%s]" "${key[@]:1}"): $value"
+    fi
     obj="${obj}${value}"
     unset value
   fi
