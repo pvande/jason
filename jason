@@ -11,7 +11,7 @@ needle=( this )
 keypath=${1#this}
 index=0
 char=${keypath:0:1}
-[[ ! "$char" =~ [\[\.:] ]] && char='.' && index=-1
+[[ ! -z $keypath && ! "$char" =~ [\[\.:] ]] && char='.' && index=-1
 until [[ -z "$char" ]]; do
   case "${char}" in ('')
     ;; ( '[' | '.' | ':' )
@@ -80,12 +80,19 @@ until [[ -z "$char" ]]; do
   esac
 
   if [[ ! -z $value ]]; then
-    if [[ ${#needle[@]} == 1 || ${#key[@]} == ${#needle[@]} ]]; then
+    if [[ ${#needle[@]} == 1 ]]; then
+      success=1
+    elif [[ "${#needle[@]}" == "${#key[@]}" ]]; then
       success=1
       for i in "${!needle[@]}"; do
-        [[ "${needle[$i]}" == '*' || "${needle[$i]}" == "${key[$i]}" ]] || unset success
+        [[ "${needle[$i]}" != '*' && "${needle[$i]}" != "${key[$i]}" ]] && unset success && break
       done
-      [[ ! -z $success ]] && echo "$(echo -n ${key[0]} && [ ${#key[*]} -gt 1 ] && printf "[%s]" "${key[@]:1}"): $value"
+    else
+      unset success
+    fi
+    if [[ ! -z $success ]]; then
+      echo "$(echo -n ${key[0]} && [ ${#key[*]} -gt 1 ] && printf "[%s]" "${key[@]:1}")	$value"
+      unset sucess
     fi
     obj="${obj}${value}"
     unset value
